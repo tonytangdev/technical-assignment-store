@@ -20,6 +20,10 @@ export interface IStore {
   entries(): JSONObject;
 }
 
+function isEmptyObject(obj: Object) {
+  return Object.keys(obj).length === 0;
+}
+
 const permissions = new Map<string, Permission>();
 
 export function Restrict(
@@ -48,34 +52,132 @@ export class Store implements IStore {
   defaultPolicy: Permission = "rw";
 
   allowedToRead(key: string): boolean {
-    const permission = permissions.get(key) ?? this.defaultPolicy;
+    const permission = getPermission(this, key) ?? this.defaultPolicy;
     return permission.includes("r");
   }
 
   allowedToWrite(key: string): boolean {
-    const permission = permissions.get(key) ?? this.defaultPolicy;
+    const permission = getPermission(this, key) ?? this.defaultPolicy;
     return permission.includes("w");
   }
 
+  protected initializeProperties() {
+    const intanceProps = Object.getOwnPropertyNames(this) as (keyof this)[];
+    intanceProps.forEach((key) => {
+      const hasPermissionSet = getPermission(this, key as string);
+      if (!!hasPermissionSet) {
+        this.write(key as string, this[key] as StoreValue);
+      }
+    });
+  }
+
   read(path: string): StoreResult {
-    const isAllowedToRead = this.allowedToRead(path);
-    if (!isAllowedToRead) {
-      throw new Error("Permission denied");
-    }
+    this.permissionsAreValid(path);
 
     const storeObject = this.store as JSONObject;
-    let valueAtPath = storeObject[path] as StoreResult;
+    const keys = path.split(":");
+    let currentKey = keys[0];
+    let currentValue = storeObject[currentKey] as StoreResult;
+    for (let i = 1; i < keys.length; i++) {
+      const key = keys[i];
+      if (!currentValue) {
+        return undefined;
+      }
+
+      if (currentValue instanceof Store) {
+        currentValue = currentValue.read(key);
+      } else if (typeof currentValue === "object") {
+        currentValue = currentValue[key] as StoreResult;
+      }
+    }
+
+    let valueAtPath = currentValue as StoreResult;
     return valueAtPath;
   }
 
   write(path: string, value: StoreValue): StoreValue {
-    const storeObject = this.store as JSONObject;
-    (storeObject[path] as StoreValue) = value;
+    const storeObject = this.store as StoreValue;
+    const keys = path.split(":");
+    let currentValue = storeObject;
+    for (let i = 0; i < keys.length - 1; i++) {
+      const currentKey = keys[i];
+      const currentKeys = keys.slice(0, i + 1).join(":");
+      const valueToRead = this.read(currentKeys);
+      if (!valueToRead) {
+        if (currentValue instanceof Store) {
+          currentValue = currentValue.write(currentKey, {});
+        } else {
+          if (currentKey === "store") {
+            ((currentValue as JSONObject)[currentKey] as StoreResult) =
+              new Store();
+            currentValue = (currentValue as JSONObject)[
+              currentKey
+            ] as StoreResult as Store;
+          } else {
+            const currentValueAsObject = currentValue as JSONObject;
+            currentValueAsObject[currentKey] = {};
+            currentValue = currentValueAsObject[currentKey] as JSONObject;
+          }
+        }
+      } else {
+        currentValue = valueToRead as StoreValue;
+      }
+    }
+
+    let lastKey = keys[keys.length - 1];
+    if (
+      !(value instanceof Store) &&
+      typeof value === "object" &&
+      !isEmptyObject(value as JSONObject)
+    ) {
+      this.writeEntries(value as JSONObject, lastKey);
+    } else {
+      if (currentValue instanceof Store) {
+        currentValue.write(lastKey, value);
+      } else {
+        ((currentValue as JSONObject)[lastKey] as StoreValue) = value;
+      }
+    }
+
     return value;
   }
 
-  writeEntries(entries: JSONObject): void {
-    throw new Error("Method not implemented.");
+  private permissionsAreValid(path: string) {
+    const key = path.split(":")[0];
+    const isAllowedToRead = this.allowedToRead(key);
+    if (!isAllowedToRead) {
+      throw new Error("Permission denied");
+    }
+  }
+
+  writeEntries(entries: JSONObject, originPath: string = ""): void {
+    const keys = this.transformEntriesIntoPaths(entries);
+
+    for (const key of keys) {
+      const path = !!originPath
+        ? `${originPath}:${Object.keys(key)[0]}`
+        : Object.keys(key)[0];
+      const value = key[Object.keys(key)[0]];
+      this.write(path, value);
+    }
+  }
+
+  private transformEntriesIntoPaths(
+    entries: JSONObject,
+    currentKey: string = "",
+    paths: Record<string, StoreValue>[] = []
+  ): Record<string, StoreValue>[] {
+    for (const key in entries) {
+      const value = entries[key];
+      const currentPath = currentKey ? `${currentKey}:${key}` : key;
+      if (typeof value === "object") {
+        this.transformEntriesIntoPaths(value as JSONObject, currentPath, paths);
+      } else {
+        paths.push({ [currentPath]: value });
+      }
+    }
+
+    return paths;
   }
 
   entries(): JSONObject {

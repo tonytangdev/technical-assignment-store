@@ -7,5 +7,6 @@ export class UserStore extends Store {
   constructor() {
     super();
     this.defaultPolicy = "rw";
+    this.initializeProperties();
   }
 }
