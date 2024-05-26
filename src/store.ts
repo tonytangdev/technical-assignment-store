@@ -71,12 +71,12 @@ export class Store implements IStore {
   private addPropertiesWithRequireAnnotation(key: keyof this) {
     const hasPermissionSet = getPermission(this, key as string);
     if (!!hasPermissionSet) {
-      this.write(key as string, this[key] as StoreValue);
+      this.writeWithoutPermission(key as string, this[key] as StoreValue);
     }
   }
 
   read(path: string): StoreResult {
-    this.permissionsAreValid(path);
+    this.getHasPermissionToReadAt(path);
 
     return this.getValueFromStore(path);
   }
@@ -119,6 +119,11 @@ export class Store implements IStore {
   }
 
   write(path: string, value: StoreValue): StoreValue {
+    this.getHasPermissionToWriteAt(path);
+    return this.writeWithoutPermission(path, value);
+  }
+
+  private writeWithoutPermission(path: string, value: StoreValue) {
     const storeObject = this.store as StoreValue;
     const keys = this.getKeysFrom(path);
     let currentValue = storeObject;
@@ -126,6 +131,14 @@ export class Store implements IStore {
     this.writeLastKeyValue(keys, value, currentValue);
 
     return value;
+  }
+
+  private getHasPermissionToWriteAt(path: string) {
+    const key = path.split(":")[0];
+    const isAllowedToWrite = this.allowedToWrite(key);
+    if (!isAllowedToWrite) {
+      throw new Error("Permission denied");
+    }
   }
 
   private writeLastKeyValue(
@@ -213,7 +226,7 @@ export class Store implements IStore {
     return currentValue;
   }
 
-  private permissionsAreValid(path: string) {
+  private getHasPermissionToReadAt(path: string) {
     const key = path.split(":")[0];
     const isAllowedToRead = this.allowedToRead(key);
     if (!isAllowedToRead) {
