@@ -78,10 +78,10 @@ export class Store implements IStore {
   read(path: string): StoreResult {
     this.getHasPermissionToReadAt(path);
 
-    return this.getValueFromStore(path);
+    return this.readValueWithoutPermission(path);
   }
 
-  private getValueFromStore(path: string) {
+  private readValueWithoutPermission(path: string) {
     const storeObject = this.store as JSONObject;
     const keys = this.getKeysFrom(path);
     let currentKey = keys[0];
@@ -134,11 +134,31 @@ export class Store implements IStore {
   }
 
   private getHasPermissionToWriteAt(path: string) {
-    const key = path.split(":")[0];
-    const isAllowedToWrite = this.allowedToWrite(key);
+    let { storeToWriteTo, key } = this.findStoreToWriteTo(path);
+
+    const isAllowedToWrite = (storeToWriteTo as Store).allowedToWrite(key);
     if (!isAllowedToWrite) {
       throw new Error("Permission denied");
     }
+  }
+
+  private findStoreToWriteTo(path: string) {
+    let storeToWriteTo = this as Store;
+    const keys = this.getKeysFrom(path);
+    let currentPath = "";
+    let key = keys[0];
+    for (let i = 0; i < keys.length - 1; i++) {
+      currentPath = keys.slice(0, i + 1).join(":");
+      const potentialStore = this.readValueWithoutPermission(currentPath);
+      if (
+        potentialStore instanceof Store &&
+        potentialStore !== storeToWriteTo
+      ) {
+        storeToWriteTo = potentialStore;
+        key = keys[i + 1];
+      }
+    }
+    return { storeToWriteTo, key };
   }
 
   private writeLastKeyValue(
