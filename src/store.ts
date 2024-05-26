@@ -86,6 +86,9 @@ export class Store implements IStore {
     const keys = this.getKeysFrom(path);
     let currentKey = keys[0];
     let currentValue = storeObject[currentKey] as StoreResult;
+    if (typeof currentValue === "function") {
+      currentValue = (currentValue as () => StoreResult)();
+    }
 
     return this.getValueWithRightType(keys, currentValue);
   }
@@ -101,6 +104,8 @@ export class Store implements IStore {
         currentValue = currentValue.read(key);
       } else if (typeof currentValue === "object") {
         currentValue = currentValue[key] as StoreResult;
+      } else if (typeof currentValue === "function") {
+        currentValue = (currentValue as () => StoreResult)();
       }
     }
 
