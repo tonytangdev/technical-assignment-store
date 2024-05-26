@@ -64,20 +64,33 @@ export class Store implements IStore {
   protected initializeProperties() {
     const intanceProps = Object.getOwnPropertyNames(this) as (keyof this)[];
     intanceProps.forEach((key) => {
-      const hasPermissionSet = getPermission(this, key as string);
-      if (!!hasPermissionSet) {
-        this.write(key as string, this[key] as StoreValue);
-      }
+      this.addPropertiesWithRequireAnnotation(key);
     });
+  }
+
+  private addPropertiesWithRequireAnnotation(key: keyof this) {
+    const hasPermissionSet = getPermission(this, key as string);
+    if (!!hasPermissionSet) {
+      this.write(key as string, this[key] as StoreValue);
+    }
   }
 
   read(path: string): StoreResult {
     this.permissionsAreValid(path);
 
+    return this.getValueFromStore(path);
+  }
+
+  private getValueFromStore(path: string) {
     const storeObject = this.store as JSONObject;
-    const keys = path.split(":");
+    const keys = this.getKeysFrom(path);
     let currentKey = keys[0];
     let currentValue = storeObject[currentKey] as StoreResult;
+
+    return this.getValueWithRightType(keys, currentValue);
+  }
+
+  private getValueWithRightType(keys: string[], currentValue: StoreResult) {
     for (let i = 1; i < keys.length; i++) {
       const key = keys[i];
       if (!currentValue) {
@@ -97,49 +110,97 @@ export class Store implements IStore {
 
   write(path: string, value: StoreValue): StoreValue {
     const storeObject = this.store as StoreValue;
-    const keys = path.split(":");
+    const keys = this.getKeysFrom(path);
     let currentValue = storeObject;
-    for (let i = 0; i < keys.length - 1; i++) {
-      const currentKey = keys[i];
-      const currentKeys = keys.slice(0, i + 1).join(":");
-      const valueToRead = this.read(currentKeys);
-      if (!valueToRead) {
-        if (currentValue instanceof Store) {
-          currentValue = currentValue.write(currentKey, {});
-        } else {
-          if (currentKey === "store") {
-            ((currentValue as JSONObject)[currentKey] as StoreResult) =
-              new Store();
-            currentValue = (currentValue as JSONObject)[
-              currentKey
-            ] as StoreResult as Store;
-          } else {
-            const currentValueAsObject = currentValue as JSONObject;
-            currentValueAsObject[currentKey] = {};
-            currentValue = currentValueAsObject[currentKey] as JSONObject;
-          }
-        }
-      } else {
-        currentValue = valueToRead as StoreValue;
-      }
-    }
+    currentValue = this.writeValuesUntilLastKey(keys, currentValue);
+    this.writeLastKeyValue(keys, value, currentValue);
 
+    return value;
+  }
+
+  private writeLastKeyValue(
+    keys: string[],
+    value: StoreValue,
+    currentValue: StoreValue
+  ) {
     let lastKey = keys[keys.length - 1];
     if (
       !(value instanceof Store) &&
       typeof value === "object" &&
       !isEmptyObject(value as JSONObject)
     ) {
-      this.writeEntries(value as JSONObject, lastKey);
+      this.writeValueWhichIsAnObject(value, lastKey);
+    } else if (currentValue instanceof Store) {
+      this.writeToChildStore(currentValue, lastKey, value);
     } else {
-      if (currentValue instanceof Store) {
-        currentValue.write(lastKey, value);
+      ((currentValue as JSONObject)[lastKey] as StoreValue) = value;
+    }
+  }
+
+  private writeToChildStore(
+    currentValue: Store,
+    lastKey: string,
+    value: StoreValue
+  ) {
+    currentValue.write(lastKey, value);
+
+    return value;
+  }
+
+  private writeValueWhichIsAnObject(
+    value: JSONObject | JSONArray | null,
+    lastKey: string
+  ) {
+    this.writeEntries(value as JSONObject, lastKey);
+  }
+
+  private writeValuesUntilLastKey(keys: string[], currentValue: StoreValue) {
+    for (let i = 0; i < keys.length - 1; i++) {
+      const currentKey = keys[i];
+      const currentKeys = keys.slice(0, i + 1).join(":");
+      const valueToRead = this.read(currentKeys);
+      if (!valueToRead) {
+        currentValue = this.writeNestedKey(currentValue, currentKey);
       } else {
-        ((currentValue as JSONObject)[lastKey] as StoreValue) = value;
+        currentValue = valueToRead as StoreValue;
       }
     }
 
-    return value;
+    return currentValue;
+  }
+
+  private writeNestedKey(currentValue: StoreValue, currentKey: string) {
+    if (currentValue instanceof Store) {
+      currentValue = this.writeToChildStore(currentValue, currentKey, {});
+    } else {
+      if (currentKey === "store") {
+        currentValue = this.writeChildAsNestedStore(currentValue, currentKey);
+      } else {
+        currentValue = this.writeSimpleNestedKey(currentValue, currentKey);
+      }
+    }
+    return currentValue;
+  }
+
+  private writeSimpleNestedKey(
+    currentValue: Exclude<StoreValue, Store>,
+    currentKey: string
+  ) {
+    const currentValueAsObject = currentValue as JSONObject;
+    currentValueAsObject[currentKey] = {};
+    currentValue = currentValueAsObject[currentKey] as JSONObject;
+    return currentValue;
+  }
+
+  private writeChildAsNestedStore(
+    currentValue: StoreValue,
+    currentKey: string
+  ) {
+    ((currentValue as JSONObject)[currentKey] as StoreResult) = new Store();
+    currentValue = (currentValue as JSONObject)[
+      currentKey
+    ] as StoreResult as Store;
+    return currentValue;
   }
 
   private permissionsAreValid(path: string) {
@@ -154,11 +215,10 @@ export class Store implements IStore {
     const keys = this.transformEntriesIntoPaths(entries);
 
     for (const key of keys) {
-      const path = !!originPath
-        ? `${originPath}:${Object.keys(key)[0]}`
-        : Object.keys(key)[0];
-      const value = key[Object.keys(key)[0]];
-      this.write(path, value);
+      const path = Object.keys(key)[0];
+      const fullPath = !!originPath ? `${originPath}:${path}` : path;
+      const value = key[path];
+      this.write(fullPath, value);
     }
   }
 
@@ -182,5 +242,9 @@ export class Store implements IStore {
 
   entries(): JSONObject {
     throw new Error("Method not implemented.");
+  }
+
+  private getKeysFrom(path: string) {
+    return path.split(":");
   }
 }
