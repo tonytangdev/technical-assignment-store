@@ -58,6 +58,11 @@ export class Store implements IStore {
   }
 
   read(path: string): StoreResult {
+    const isAllowedToRead = this.allowedToRead(path);
+    if (!isAllowedToRead) {
+      throw new Error("Permission denied");
+    }
+
     const storeObject = this.store as JSONObject;
     let valueAtPath = storeObject[path] as StoreResult;
     return valueAtPath;
