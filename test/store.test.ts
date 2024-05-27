@@ -358,7 +358,12 @@ describe("Test Store - Permission Inheritance", () => {
         this.initializeProperties();
       }
     }
-    class ChildStore extends ParentStore {}
+    class ChildStore extends ParentStore {
+      constructor() {
+        super();
+        this.initializeProperties();
+      }
+    }
     const baseChildStore = new ChildStore();
     const nestedChildStore = baseChildStore.read(
       "parentProp:parentProp:parentProp"

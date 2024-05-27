@@ -28,19 +28,40 @@ const permissions = new Map<string, Permission>();
 
 export function Restrict(
   permission: Permission = "none"
-): (target: Object, propertyKey: string | symbol) => void {
-  return function (target: Object, propertyKey: string | symbol) {
+): (target: Store, propertyKey: string | symbol) => void {
+  return function (target: Store, propertyKey: string | symbol) {
     const key = generateKey(target, propertyKey);
     permissions.set(key, permission);
   };
 }
 
 function getPermission(
-  target: Object,
+  target: Store,
   propertyKey: string | symbol
 ): Permission | undefined {
   const key = generateKey(target, propertyKey);
-  return permissions.get(key);
+  let parent = Object.getPrototypeOf(target) as Store;
+  let permission = permissions.get(key);
+  if (!!permission) return permission;
+
+  ({ permission, parent } = getPermissoinFromParentClass(parent, propertyKey));
+
+  return permission;
+}
+
+function getPermissoinFromParentClass(
+  parent: Store,
+  propertyKey: string | symbol
+) {
+  let permission: Permission | undefined = undefined;
+  let hasParent = !!parent?.constructor.name;
+  while (!permission && !!hasParent) {
+    const parentKey = generateKey(parent, propertyKey);
+    permission = permissions.get(parentKey);
+    parent = Object.getPrototypeOf(parent) as Store;
+    hasParent = !!parent?.constructor.name;
+  }
+  return { permission, parent };
 }
 
 function generateKey(target: Object, propertyKey: string | symbol) {
