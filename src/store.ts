@@ -70,7 +70,7 @@ export class Store implements IStore {
 
   private addPropertiesWithRequireAnnotation(key: keyof this) {
     const hasPermissionSet = getPermission(this, key as string);
-    if (!!hasPermissionSet) {
+    if (!!hasPermissionSet && hasPermissionSet !== "none") {
       this.writeWithoutPermission(key as string, this[key] as StoreValue);
     }
   }
@@ -284,7 +284,7 @@ export class Store implements IStore {
   }
 
   entries(): JSONObject {
-    throw new Error("Method not implemented.");
+    return this.store as JSONObject;
   }
 
   private getKeysFrom(path: string) {

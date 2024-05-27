@@ -202,6 +202,11 @@ describe("Test Store - Decorators", () => {
     class TestStore extends Store {
       @Restrict("none")
       public restrictedProp?: string;
+
+      constructor() {
+        super();
+        this.initializeProperties();
+      }
     }
     const testStore = new TestStore();
     expect(() => {
@@ -213,6 +218,11 @@ describe("Test Store - Decorators", () => {
     class TestStore extends Store {
       @Restrict("r")
       public readableProperty = "test";
+
+      constructor() {
+        super();
+        this.initializeProperties();
+      }
     }
     const testStore = new TestStore();
     expect(testStore.entries()).toHaveProperty("readableProperty", "test");
@@ -222,6 +232,11 @@ describe("Test Store - Decorators", () => {
     class TestStore extends Store {
       @Restrict("none")
       public restrictedProp = "test";
+
+      constructor() {
+        super();
+        this.initializeProperties();
+      }
     }
     const testStore = new TestStore();
     expect(testStore.entries()).not.toHaveProperty("restrictedProp");
@@ -241,6 +256,11 @@ describe("Test Store - Default Policy Behavior", () => {
     class TestStore extends Store {
       public defaultPolicy: Permission = "r";
       public defaultRestrictedProp?: string;
+
+      constructor() {
+        super();
+        this.initializeProperties();
+      }
     }
     const testStore = new TestStore();
     expect(() => {
@@ -251,6 +271,11 @@ describe("Test Store - Default Policy Behavior", () => {
   it("allows writing a key with no explicit permissions", () => {
     class TestStore extends Store {
       public defaultNonRestrictedProp?: string;
+
+      constructor() {
+        super();
+        this.initializeProperties();
+      }
     }
     const testStore = new TestStore();
     testStore.write("defaultNonRestrictedProp", "testValue");
@@ -295,6 +320,11 @@ describe("Test Store - Behavior when Same Key is Used Multiple Times", () => {
     class TestStore extends Store {
       @Restrict("rw")
       public prop?: string;
+
+      constructor() {
+        super();
+        this.initializeProperties();
+      }
     }
     const testStore = new TestStore();
     testStore.write("prop", "value1");
@@ -322,8 +352,13 @@ describe("Test Store - Permission Inheritance", () => {
     class ParentStore extends Store {
       @Restrict("r")
       public parentProp = lazy(() => new ChildStore());
+
+      constructor() {
+        super();
+        this.initializeProperties();
+      }
     }
-    class ChildStore extends ParentStore { }
+    class ChildStore extends ParentStore {}
     const baseChildStore = new ChildStore();
     const nestedChildStore = baseChildStore.read(
       "parentProp:parentProp:parentProp"
